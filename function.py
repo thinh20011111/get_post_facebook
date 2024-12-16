@@ -3,6 +3,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import re
+from selenium.common.exceptions import NoSuchElementException, TimeoutException, StaleElementReferenceException
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.common.keys import Keys
 import os
@@ -24,3 +25,19 @@ class BasePage:
     INPUT_USERNAME = "//input[@id='email']"
     INPUT_PASSWORD = "//input[@id='pass']"    
     LOGIN_BUTTON = "//button[text()='Đăng nhập']"
+    
+    
+    
+    def login(self):
+        self
+        
+        
+    def is_element_present_by_xpath(self, xpath: str) -> bool:
+        try:
+            # Tìm phần tử bằng XPath
+            self.driver.find_element(By.XPATH, xpath)
+            return True
+        except NoSuchElementException:
+            # Nếu không tìm thấy phần tử, trả về False
+            return False
+        
