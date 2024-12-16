@@ -3,6 +3,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from utils.config import Config
 from selenium.webdriver.chrome.options import Options
+import time
 import os
 
 def main():
@@ -18,49 +19,42 @@ def main():
     # Mở trang web
     base_page = BasePage(driver)
     data = base_page.get_data_from_json_file("data") or {}
-    email = data["account"]["email"]
-    password = data["account"]["password"]
+    email_facebook = data["account_facebook"]["email"]
+    password_facebook = data["account_facebook"]["password"]
     
     driver.maximize_window()
-
-    # Sử dụng BasePage để thực hiện hành động
-    group_url = "https://www.facebook.com/tlinhww"  # Link group hoặc page cần crawl
-    
-    # Số lượng bài viết cần crawl
-    num_posts = 10
     output_file = "facebook_posts.csv"
     
     try:
         driver.get(config.FACEBOOK_URL)
         
         # Đăng nhập Facebook
-        base_page.login(email, password)
+        base_page.login_facebook(email_facebook, password_facebook)
         
         # Crawl bài viết mới
+        group_url = "https://www.facebook.com/tlinhww"  # Link group hoặc page cần crawl
+        num_posts = 3
         existing_posts = base_page.read_existing_posts(output_file)
         new_posts = base_page.crawl_posts(group_url, num_posts, existing_posts)
 
         # Lưu bài viết vào file CSV và thông tin ảnh vào thư mục media
         posts_with_media = []
         for post in new_posts:
-            post_content = post["content"]
-            media_urls = post["media"]
-            
-            # Map ảnh với bài viết, tạo danh sách ảnh tương ứng
-            media_paths = []
-            for media_url in media_urls:
-                media_name = media_url.split("/")[-1]
-                media_path = os.path.join(base_page.MEDIA_DIR, media_name)  # Lưu ảnh vào thư mục media
-                media_paths.append(media_path)
+            post_content = post.get("Post Content", "")  # Lấy nội dung bài viết
+            media_urls = post.get("Media", [])          # Lấy danh sách media
 
-            # Thêm thông tin vào bài viết
-            posts_with_media.append({
-                "Post Content": post_content,
-                "Media": "; ".join(media_paths)  # Dùng dấu phân cách giữa các ảnh
-            })
+            if post_content and media_urls:  # Chỉ lưu bài viết có tiêu đề và media
+                posts_with_media.append({
+                    "Post Content": post_content,
+                    "Media": "; ".join(media_urls)  # Dùng dấu phân cách giữa các ảnh
+                })
 
-        # Cập nhật CSV với bài viết mới và thông tin ảnh
-        base_page.save_to_csv(posts_with_media, output_file)
+        # Kiểm tra dữ liệu trước khi lưu
+        if posts_with_media:
+            print(f"Đang lưu {len(posts_with_media)} bài viết vào file CSV.")
+            base_page.save_to_csv(posts_with_media, output_file)
+        else:
+            print("Không có bài viết nào để lưu vào CSV.")
 
     finally:
         driver.quit()

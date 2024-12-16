@@ -11,6 +11,7 @@ import os
 import logging
 from PIL import Image
 from io import BytesIO
+import csv
 import pandas as pd
 import requests
 import json
@@ -25,21 +26,38 @@ logging.basicConfig(
 class BasePage:
     def __init__(self, driver):
         self.driver = driver
-
+    
     INPUT_USERNAME = "//input[@id='email']"
     INPUT_PASSWORD = "//input[@id='pass']"    
     LOGIN_BUTTON = "//button[text()='Log in']"
-    CONTAIN_MEDIA = "//img[contains(@src, 'fbcdn.net')]"
+    CONTAIN_MEDIA = "/html/body/div[1]/div/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div/div/div[4]/div[2]/div/div[2]/div[2]/div[{index}]/div/div/div/div/div/div/div/div/div/div/div/div[13]/div/div/div[3]/div[2]"
+    TITLE_POST = "/html/body/div[1]/div/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div/div/div[4]/div[2]/div/div[2]/div[2]/div[{index}]/div/div/div/div/div/div/div/div/div/div/div/div[13]/div/div/div[3]/div[1]/div/div/div/div/span"
     MEDIA_DIR = "media"  # Thư mục lưu ảnh
+    LOGIN_EMAIL_INPUT = "//input[@id='email' and @type='text']"
+    LOGIN_PWD_INPUT = "//input[@id='password' and @type='password']"
+    LOGIN_SUBMIT_BTN = "//button[@id='demo-customized-button' and ./div[text()='Đăng nhập']]"
+    PROFILE_ACCOUNT_ICON = "//div[@id='root']/div/div/div/div/header/div/div/div[3]/div/div[2]/div[2]/i"
+    INPUT_POST = "//textarea[@name='textInputCreatePost']"
+    INPUT_MEDIA = "//input[@type='file' and @accept='image/jpeg,image/png,/.glb,video/mp4,video/avi,video/quicktime,video/Ogg,video/wmv,video/mov' and @multiple and @autocomplete='off']"
+    CREATE_POST_BUTTON = "//button[@id='demo-customized-button' and @disabled]//div[text()='Đăng']"
+    OPEN_FORM = "//p[text()='Ảnh/Video']"
 
     def find_element(self, locator_type, locator_value):
         return self.driver.find_element(locator_type, locator_value)
     
-    def login(self, username, password):
+    def login_facebook(self, username, password):
         self.input_text(self.INPUT_USERNAME, username)
         self.input_text(self.INPUT_PASSWORD, password)
         self.click_element(self.LOGIN_BUTTON) 
         time.sleep(5)
+    
+    def login_emso(self, url, username, password):
+        self.driver.get(url)
+        time.sleep(1)
+        self.input_text(self.LOGIN_EMAIL_INPUT, username)
+        self.input_text(self.LOGIN_PWD_INPUT, password)
+        self.click_element(self.LOGIN_SUBMIT_BTN)
+        self.wait_for_element_clickable(self.PROFILE_ACCOUNT_ICON)
         
     def is_element_present_by_xpath(self, xpath: str) -> bool:
         try:
@@ -115,142 +133,107 @@ class BasePage:
             data = json.load(f, strict = False)
         return data
 
-    def read_existing_posts(self, filename):
-        """
-        Đọc danh sách bài viết đã tồn tại từ file CSV. Nếu file không tồn tại, trả về dictionary rỗng.
-        """
+    def read_existing_posts(self, output_file):
+        existing_posts = {}
+        
+        # Kiểm tra nếu file CSV tồn tại
+        if os.path.exists(output_file):
+            with open(output_file, mode="r", newline="", encoding="utf-8") as file:
+                reader = csv.DictReader(file)
+                
+                # Kiểm tra xem file CSV có chứa tiêu đề không
+                if "Post Content" not in reader.fieldnames:
+                    print(f"Warning: The CSV file does not contain the expected header 'Post Content'.")
+                    return existing_posts
+                
+                # Đọc từng dòng dữ liệu và lưu lại nội dung bài viết
+                for row in reader:
+                    # Kiểm tra nếu "Post Content" có trong dòng dữ liệu
+                    if "Post Content" in row:
+                        existing_posts[row["Post Content"]] = True
+        
+        return existing_posts
+    
+    def extract_media_from_post(self, index):
         try:
-            if not os.path.exists(filename):
-                print(f"File {filename} không tồn tại, tạo file mới.")
-                return {}  # Nếu file không tồn tại, tạo dictionary rỗng
+            media_element = self.driver.find_element(By.XPATH, self.CONTAIN_MEDIA.replace("{index}", str(index)))
+            image_elements = media_element.find_elements(By.XPATH, ".//img[contains(@src, 'fbcdn.net')]")  # Tìm các ảnh
+            video_elements = media_element.find_elements(By.XPATH, ".//video")  # Tìm các video
 
-            # Đọc file CSV
-            existing_df = pd.read_csv(filename, encoding='utf-8-sig')
-            existing_posts = {}
+            # Nếu có video thì bỏ qua và không lấy media
+            if video_elements:
+                return {"images": [], "videos": []}
 
-            # Đọc các bài viết và media từ file CSV
-            for _, row in existing_df.iterrows():
-                content = row["Post Content"]
-                media_url = row["Media"]
-                if content not in existing_posts:
-                    existing_posts[content] = set()
-                existing_posts[content].add(media_url)
+            filtered_images = []
+            for img in image_elements:
+                img_url = img.get_attribute("src")
+                if img_url:
+                    try:
+                        width = self.driver.execute_script("return arguments[0].naturalWidth;", img)
+                        if width >= 100:  # Kiểm tra kích thước ảnh
+                            filtered_images.append(img_url)
+                    except Exception as e:
+                        print(f"Lỗi khi kiểm tra kích thước ảnh: {e}")
 
-            print(f"Đã tải {len(existing_posts)} bài viết từ file {filename}.")
-            return existing_posts
-        except pd.errors.ParserError:
-            print(f"Lỗi phân tích cú pháp khi đọc file {filename}. Kiểm tra định dạng file.")
-            return {}  # Nếu có lỗi khi đọc, trả về dictionary rỗng
+            return {"images": filtered_images, "videos": []}
         except Exception as e:
-            print(f"Lỗi không xác định khi đọc file {filename}: {e}")
-            return {}  # Nếu gặp lỗi khác, trả về dictionary rỗng
-
-    def extract_images(self, post_element):
-        """
-        Trích xuất các ảnh từ bài viết và lưu vào thư mục media.
-        Mỗi bài viết sẽ có một thư mục riêng biệt trong `media` để lưu ảnh.
-        """
-        # Lấy tất cả các ảnh từ bài viết
-        images = post_element.find_elements(By.XPATH, "//img[contains(@src, 'fbcdn.net')]")
-        media_urls = []
-        
-        for img in images:
-            img_url = img.get_attribute("src")
-            # Kiểm tra ảnh nếu cần
-            response = requests.get(img_url)
-            img_data = Image.open(BytesIO(response.content))
-            
-            # Kiểm tra kích thước ảnh
-            if img_data.height >= 100 and img_data.width >= 100 and img_data.width <= 500:
-                media_urls.append(img_url)
-        
-        return media_urls
+            print(f"Lỗi khi trích xuất media từ bài viết thứ {index}: {e}")
+            return {"images": [], "videos": []}
+    
+    def extract_title_from_post(self, index):
+        try:
+            title_element = self.driver.find_element(By.XPATH, self.TITLE_POST.replace("{index}", str(index)))
+            return title_element.text.strip() if title_element else ""
+        except Exception as e:
+            print(f"Lỗi khi trích xuất tiêu đề từ bài viết thứ {index}: {e}")
+            return ""
 
     def crawl_posts(self, group_url, num_posts, existing_posts):
-        """
-        Crawl bài viết từ group hoặc trang Facebook, bỏ qua bài viết trùng lặp.
-        Kiểm tra cả nội dung bài viết và các ảnh trong bài viết.
-        """
         print(f"Đang crawl bài viết từ: {group_url}")
         self.driver.get(group_url)
-        time.sleep(5)  # Chờ trang tải
+        time.sleep(5)
 
         posts = []
-        scroll_pause_time = 3  # Thời gian chờ mỗi lần scroll
+        scroll_pause_time = 3
         last_height = self.driver.execute_script("return document.body.scrollHeight")
 
         while len(posts) < num_posts:
-            # Lấy các bài viết
             post_elements = self.driver.find_elements(By.XPATH, "//div[contains(@data-ad-preview, 'message')]")
-            for post in post_elements:
+            for index, post in enumerate(post_elements, start=1):
                 try:
-                    content = post.text.strip()
-                    if content:
-                        # Trích xuất các ảnh trong bài viết
-                        media_urls = self.extract_images(post)
+                    title = self.extract_title_from_post(index)  # Lấy tiêu đề từ bài viết
+                    if title and title not in existing_posts:  # Chỉ lấy bài có tiêu đề và chưa tồn tại
+                        media = self.extract_media_from_post(index)  # Lấy media từ bài viết
 
-                        # Kiểm tra xem bài viết và ảnh đã có trong danh sách bài viết đã tồn tại chưa
-                        if content not in existing_posts:
-                            # Nếu bài viết chưa có, thêm vào danh sách mới
-                            post_id = len(posts) + 1  # Tạo ID bài viết dựa trên số lượng bài viết đã thu thập
+                        if media["images"]:  # Nếu có ảnh thì xử lý
+                            post_id = len(posts) + 1
                             post_folder = os.path.join(self.MEDIA_DIR, f"post_{post_id}")
-                            os.makedirs(post_folder, exist_ok=True)  # Tạo thư mục lưu ảnh của bài viết
+                            os.makedirs(post_folder, exist_ok=True)
 
-                            # Tải ảnh và lưu vào thư mục của bài viết
-                            for index, img_url in enumerate(media_urls):
+                            for i, img_url in enumerate(media["images"]):
                                 try:
-                                    print(f"Đang tải ảnh {index + 1} từ bài viết: {content[:30]}...")
                                     response = requests.get(img_url)
-                                    img_name = f"image_{index + 1}.jpg"
-                                    img_path = os.path.join(post_folder, img_name)
-
+                                    img_path = os.path.join(post_folder, f"image_{i + 1}.jpg")
                                     with open(img_path, "wb") as file:
                                         file.write(response.content)
                                 except Exception as e:
-                                    print(f"Lỗi khi tải ảnh {index + 1}: {e}")
+                                    print(f"Lỗi khi tải ảnh {i + 1}: {e}")
 
                             posts.append({
-                                "content": content,
-                                "media": [os.path.join(post_folder, f"image_{i + 1}.jpg") for i in range(len(media_urls))]
+                                "Post Content": title,  # Lưu tiêu đề
+                                "Media": [os.path.join(post_folder, f"image_{i + 1}.jpg") for i in range(len(media["images"]))],  # Lưu ảnh
                             })
 
-                            # Lưu bài viết và ảnh vào existing_posts
-                            existing_posts[content] = set(media_urls)
-                        else:
-                            # Kiểm tra các ảnh của bài viết xem có trùng không
-                            if not existing_posts[content].intersection(media_urls):
-                                post_id = len(posts) + 1
-                                post_folder = os.path.join(self.MEDIA_DIR, f"post_{post_id}")
-                                os.makedirs(post_folder, exist_ok=True)
-
-                                for index, img_url in enumerate(media_urls):
-                                    try:
-                                        print(f"Đang tải ảnh {index + 1} từ bài viết: {content[:30]}...")
-                                        response = requests.get(img_url)
-                                        img_name = f"image_{index + 1}.jpg"
-                                        img_path = os.path.join(post_folder, img_name)
-
-                                        with open(img_path, "wb") as file:
-                                            file.write(response.content)
-                                    except Exception as e:
-                                        print(f"Lỗi khi tải ảnh {index + 1}: {e}")
-
-                                posts.append({
-                                    "content": content,
-                                    "media": [os.path.join(post_folder, f"image_{i + 1}.jpg") for i in range(len(media_urls))]
-                                })
-                                existing_posts[content].update(media_urls)
+                            existing_posts[title] = True  # Đánh dấu bài viết đã lấy
 
                     if len(posts) >= num_posts:
                         break
                 except Exception as e:
-                    print(f"Lỗi khi lấy bài viết: {e}")
+                    print(f"Lỗi khi lấy bài viết thứ {index}: {e}")
 
-            # Scroll xuống
             self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
             time.sleep(scroll_pause_time)
 
-            # Kiểm tra nếu không scroll được nữa
             new_height = self.driver.execute_script("return document.body.scrollHeight")
             if new_height == last_height:
                 print("Không thể tải thêm bài viết.")
@@ -260,15 +243,33 @@ class BasePage:
         print(f"Đã crawl được {len(posts)} bài viết mới.")
         return posts
 
-    def save_to_csv(self, posts, filename):
-        """
-        Lưu thông tin bài viết và ảnh vào file CSV.
-        """
-        posts_df = pd.DataFrame(posts)
-        
-        if not os.path.exists(filename):
-            posts_df.to_csv(filename, mode='w', index=False, encoding="utf-8-sig")
-        else:
-            posts_df.to_csv(filename, mode='a', index=False, encoding="utf-8-sig", header=False)
-        
-        print(f"Đã lưu {len(posts)} bài viết vào file {filename}.")
+    def save_to_csv(self, posts_with_media, output_file):
+        # Kiểm tra xem file có tồn tại không, nếu không thì tạo mới
+        try:
+            with open(output_file, mode='a', newline='', encoding='utf-8') as file:
+                fieldnames = ["Post Content", "Media"]  # Các cột trong CSV
+
+                # Nếu file chưa có dữ liệu thì ghi tiêu đề cột
+                writer = csv.DictWriter(file, fieldnames=fieldnames)
+
+                # Ghi tiêu đề cột chỉ một lần khi file mới
+                if file.tell() == 0:  # Kiểm tra nếu file trống
+                    writer.writeheader()
+
+                # Ghi từng bài post vào file
+                for post in posts_with_media:
+                    writer.writerow(post)
+        except Exception as e:
+            print(f"Lỗi khi lưu vào CSV: {e}")
+            
+    def read_existing_posts(self, filename):
+        import csv
+        existing_posts = {}
+        try:
+            with open(filename, mode='r', encoding="utf-8-sig") as file:
+                reader = csv.DictReader(file)
+                for row in reader:
+                    existing_posts[row["Post Content"]] = True
+        except FileNotFoundError:
+            print(f"File {filename} không tồn tại, tạo mới...")
+        return existing_posts

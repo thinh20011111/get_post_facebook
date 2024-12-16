@@ -1,5 +1,9 @@
 {
-    "account": {
+    "account_facebook": {
+        "email": "testeremso@gmail.com",
+        "password": "Neko10121311"
+    },
+    "account_emso": {
         "email": "testeremso@gmail.com",
         "password": "Neko10121311"
     }
