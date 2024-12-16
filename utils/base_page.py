@@ -9,6 +9,7 @@ from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.common.keys import Keys
 import os
 import logging
+import pandas as pd
 import json
 import time
 
@@ -33,6 +34,7 @@ class BasePage:
         self.input_text(self.INPUT_USERNAME, username)
         self.input_text(self.INPUT_PASSWORD, password)
         self.click_element(self.LOGIN_BUTTON) 
+        time.sleep(5)
         
     def is_element_present_by_xpath(self, xpath: str) -> bool:
         try:
@@ -107,4 +109,88 @@ class BasePage:
         with open(data_file, 'r', encoding='utf-8') as f:
             data = json.load(f, strict = False)
         return data
-    
+
+    def read_existing_posts(self, filename):
+        """
+        Đọc danh sách bài viết đã tồn tại từ file CSV. Nếu file không tồn tại, trả về tập hợp rỗng.
+        """
+        try:
+            if not os.path.exists(filename):
+                print(f"File {filename} không tồn tại, tạo file mới.")
+                return set()  # Nếu file không tồn tại, tạo tập hợp rỗng
+
+            # Đọc file CSV
+            existing_df = pd.read_csv(filename, encoding='utf-8-sig')
+            existing_posts = set(existing_df["Post Content"].tolist())
+            print(f"Đã tải {len(existing_posts)} bài viết từ file {filename}.")
+            return existing_posts
+        except pd.errors.ParserError:
+            print(f"Lỗi phân tích cú pháp khi đọc file {filename}. Kiểm tra định dạng file.")
+            return set()  # Nếu có lỗi khi đọc, trả về tập hợp rỗng
+        except Exception as e:
+            print(f"Lỗi không xác định khi đọc file {filename}: {e}")
+            return set()  # Nếu gặp lỗi khác, trả về tập hợp rỗng
+
+    def crawl_posts(self, group_url, num_posts, existing_posts):
+        """
+        Crawl bài viết từ group hoặc trang Facebook, bỏ qua bài viết trùng lặp.
+        """
+        print(f"Đang crawl bài viết từ: {group_url}")
+        self.driver.get(group_url)
+        time.sleep(5)  # Chờ trang tải
+
+        posts = []
+        scroll_pause_time = 3  # Thời gian chờ mỗi lần scroll
+        last_height = self.driver.execute_script("return document.body.scrollHeight")
+
+        while len(posts) < num_posts:
+            # Lấy các bài viết
+            post_elements = self.driver.find_elements(By.XPATH, "//div[contains(@data-ad-preview, 'message')]")
+            for post in post_elements:
+                try:
+                    content = post.text.strip()
+                    if content and content not in posts and content not in existing_posts:  # Tránh trùng lặp
+                        posts.append(content)
+                        print(f"Thu thập bài viết: {content[:30]}...")  # Hiển thị 30 ký tự đầu
+                    if len(posts) >= num_posts:
+                        break
+                except Exception as e:
+                    print(f"Lỗi khi lấy bài viết: {e}")
+
+            # Scroll xuống
+            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(scroll_pause_time)
+
+            # Kiểm tra nếu không scroll được nữa
+            new_height = self.driver.execute_script("return document.body.scrollHeight")
+            if new_height == last_height:
+                print("Không thể tải thêm bài viết.")
+                break
+            last_height = new_height
+        
+        print(f"Đã crawl được {len(posts)} bài viết mới.")
+        return posts
+
+    def read_and_update_csv(self, new_data, filename):
+        """
+        Đọc dữ liệu từ file CSV, loại bỏ dữ liệu trùng lặp, và ghi dữ liệu mới vào.
+        """
+        # Đọc bài viết hiện có từ file CSV
+        existing_posts = self.read_existing_posts(filename)
+
+        # Loại bỏ bài viết trùng lặp
+        filtered_data = [post for post in new_data if post not in existing_posts]
+        if not filtered_data:
+            print("Không có bài viết mới để thêm vào file.")
+            return
+
+        # Ghi dữ liệu mới vào file CSV
+        new_df = pd.DataFrame(filtered_data, columns=["Post Content"])
+
+        # Kiểm tra xem file đã tồn tại chưa, nếu chưa thì tạo mới và ghi header
+        if not os.path.exists(filename):
+            new_df.to_csv(filename, mode='w', index=False, encoding="utf-8-sig")
+        else:
+            new_df.to_csv(filename, mode='a', index=False, encoding="utf-8-sig", header=False)
+        
+        print(f"Đã thêm {len(filtered_data)} bài viết mới vào file {filename}.")
