@@ -41,10 +41,6 @@ def main():
         driver.get(config.FACEBOOK_URL)
         base_page.login_facebook(email_facebook, password_facebook)
 
-        # Biến theo dõi tài khoản EMSo hiện tại
-        emso_username = "testeremso6@gmail.com"
-        emso_password = "khongnhomatkhaucu"
-
         # Lặp qua tất cả các tài khoản và xử lý
         for account_key, account_data in accounts_data.items():
             try:
@@ -57,7 +53,7 @@ def main():
                 url1 = account_data["url1"]
 
                 # Crawl bài viết mới từ Facebook group_url
-                num_posts = 3
+                num_posts = 1
                 existing_posts = base_page.read_existing_posts(output_file)
                 new_posts = base_page.crawl_posts(group_url, num_posts, existing_posts)
 
@@ -80,10 +76,12 @@ def main():
                     image_paths = post.get("media", "")
                     base_page.create_post(title, image_paths)
                     print(f"Đã đăng bài: {title}")
+                    
                 base_page.logout()
 
             except Exception as e:
                 print(f"Đã gặp lỗi khi xử lý tài khoản {account_key}: {e}")
+                base_page.logout()
                 continue  # Tiếp tục với tài khoản tiếp theo nếu gặp lỗi
 
         print("Hoàn tất tất cả các bài đăng.")
