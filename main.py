@@ -23,38 +23,27 @@ def main():
     password_facebook = data["account_facebook"]["password"]
     
     driver.maximize_window()
-    output_file = "facebook_posts.csv"
+    output_file = "facebook_posts.json"
     
     try:
         driver.get(config.FACEBOOK_URL)
-        
-        # Đăng nhập Facebook
+
+        # Đăng nhập Facebook (Thay thế bằng hàm đăng nhập thực tế nếu cần)
         base_page.login_facebook(email_facebook, password_facebook)
-        
+        time.sleep(60)
+
         # Crawl bài viết mới
         group_url = "https://www.facebook.com/tlinhww"  # Link group hoặc page cần crawl
         num_posts = 3
         existing_posts = base_page.read_existing_posts(output_file)
         new_posts = base_page.crawl_posts(group_url, num_posts, existing_posts)
 
-        # Lưu bài viết vào file CSV và thông tin ảnh vào thư mục media
-        posts_with_media = []
-        for post in new_posts:
-            post_content = post.get("Post Content", "")  # Lấy nội dung bài viết
-            media_urls = post.get("Media", [])          # Lấy danh sách media
-
-            if post_content and media_urls:  # Chỉ lưu bài viết có tiêu đề và media
-                posts_with_media.append({
-                    "Post Content": post_content,
-                    "Media": "; ".join(media_urls)  # Dùng dấu phân cách giữa các ảnh
-                })
-
-        # Kiểm tra dữ liệu trước khi lưu
-        if posts_with_media:
-            print(f"Đang lưu {len(posts_with_media)} bài viết vào file CSV.")
-            base_page.save_to_csv(posts_with_media, output_file)
+        # Lưu bài viết vào file JSON
+        if new_posts:
+            base_page.save_to_json(group_url, new_posts, output_file)
+            print(f"Đã lưu {len(new_posts)} bài viết mới vào file {output_file}.")
         else:
-            print("Không có bài viết nào để lưu vào CSV.")
+            print("Không có bài viết mới để lưu.")
 
     finally:
         driver.quit()
