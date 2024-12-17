@@ -86,8 +86,8 @@ def main():
             base_page.driver.get(url1)
             for post in new_posts:
                 title = post.get("title", "")
-                image_paths = post.get("media", [])
-                base_page.create_post(title, "file_input_locator", image_paths)
+                image_paths = post.get("media", "")
+                base_page.create_post(title, image_paths)
                 print(f"Đã đăng bài: {title}")
 
         print("Hoàn tất tất cả các bài đăng.")
