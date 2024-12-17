@@ -31,7 +31,7 @@ class BasePage:
     INPUT_PASSWORD = "//input[@id='pass']"    
     LOGIN_BUTTON = "//button[text()='Log in']"
     CONTAIN_MEDIA = "/html/body/div[1]/div/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div/div/div[4]/div[2]/div/div[2]/div[2]/div[{index}]/div/div/div/div/div/div/div/div/div/div/div/div[13]/div/div/div[3]/div[2]"
-    TITLE_POST = "/html/body/div[1]/div/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div/div/div[4]/div[2]/div/div[2]/div[2]/div[{index}]/div/div/div/div/div/div/div/div/div/div/div/div[13]/div/div/div[3]/div[1]/div/div/div/div/span"
+    TITLE_POST = "/html/body/div[1]/div/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div/div/div[4]/div[2]/div/div[2]/div[2]/div[{index}]/div/div/div/div/div/div/div/div/div/div/div/div[13]/div/div/div[3]"
     MEDIA_DIR = "media"  # Thư mục lưu ảnh
     LOGIN_EMAIL_INPUT = "//input[@id='email' and @type='text']"
     LOGIN_PWD_INPUT = "//input[@id='password' and @type='password']"
@@ -158,10 +158,14 @@ class BasePage:
 
     def extract_title_from_post(self, index):
         try:
-            time.sleep(3)
+            # Tìm phần tử bằng XPath
             title_element = self.driver.find_element(By.XPATH, self.TITLE_POST.replace("{index}", str(index)))
-            title = title_element.text.strip()
-            return title.encode("utf-8", "ignore").decode("utf-8")  # Format icon characters
+            
+            # Lấy toàn bộ văn bản bao gồm cả các thẻ con
+            title = title_element.get_attribute("innerText").strip()
+            
+            # Trả về văn bản đã loại bỏ các ký tự không hợp lệ (nếu có)
+            return title.encode("utf-8", "ignore").decode("utf-8")
         except Exception as e:
             print(f"Error extracting title: {e}")
             return ""
@@ -186,21 +190,26 @@ class BasePage:
                     if not media:
                         continue
 
-                    post_id = len(posts) + 1
-                    post_folder = os.path.join(self.MEDIA_DIR, f"post_{post_id}")
-                    os.makedirs(post_folder, exist_ok=True)
+                    media_files = []  # List to store media file names
 
-                    media_files = []
+                    # Lưu các hình ảnh trực tiếp vào thư mục MEDIA_DIR
                     for i, img_url in enumerate(media):
                         try:
+                            # Tạo tên file cho hình ảnh
+                            img_filename = f"media_{len(posts) + 1}_{i + 1}.jpg"
+                            img_path = os.path.join(self.MEDIA_DIR, img_filename)
+
+                            # Tải và lưu hình ảnh vào thư mục MEDIA_DIR
                             response = requests.get(img_url)
-                            img_path = os.path.join(post_folder, f"image_{i + 1}.jpg")
                             with open(img_path, "wb") as file:
                                 file.write(response.content)
-                            media_files.append(img_path)
+
+                            # Lưu tên file vào danh sách
+                            media_files.append(img_filename)
                         except Exception as e:
                             print(f"Error downloading image {i + 1}: {e}")
 
+                    # Thêm bài viết vào danh sách
                     posts.append({"title": title, "media": media_files})
                     existing_posts[title] = True
 
@@ -209,8 +218,9 @@ class BasePage:
                 except Exception as e:
                     print(f"Error processing post {index}: {e}")
 
+            # Cuộn trang để tải thêm bài viết
             self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(3)
+            time.sleep(5)
 
             new_height = self.driver.execute_script("return document.body.scrollHeight")
             if new_height == last_height:
@@ -221,8 +231,26 @@ class BasePage:
         print(f"Crawled {len(posts)} new posts.")
         return posts
 
+    @staticmethod
+    def extract_username_from_url(url):
+        """
+        Trích xuất username từ URL của Facebook.
+        """
+        match = re.search(r"https://www\.facebook\.com/([^/]+)", url)
+        if match:
+            return match.group(1)
+        return None
+
     def save_to_json(self, group_url, posts, output_file):
         try:
+            # Trích xuất username từ group_url
+            username = self.extract_username_from_url(group_url)
+
+            # Nếu không trích xuất được username, dừng lại
+            if not username:
+                print("Invalid Facebook URL, cannot extract username.")
+                return
+
             # Nếu file chưa tồn tại, tạo mới một dictionary rỗng
             if not os.path.exists(output_file):
                 data = {}
@@ -235,20 +263,14 @@ class BasePage:
                         print(f"Error decoding JSON from {output_file}. The file might be corrupted.")
                         return  # Nếu file bị lỗi, dừng lại
 
-            # Đảm bảo group_url có trong data
-            if group_url not in data:
-                data[group_url] = []
+            # Lưu username vào data
+            data[username] = posts
 
-            # Nếu posts không phải là list, chuyển đổi thành list
-            if not isinstance(posts, list):
-                posts = [posts]
-
-            # Thêm các posts mới vào data
-            data[group_url].extend(posts)
-
-            # Lưu dữ liệu vào file
+            # Lưu dữ liệu vào file JSON
             with open(output_file, "w", encoding="utf-8") as file:
                 json.dump(data, file, ensure_ascii=False, indent=4)
+
+            print(f"Data saved successfully to {output_file}.")
 
         except Exception as e:
             print(f"Error saving to JSON: {e}")

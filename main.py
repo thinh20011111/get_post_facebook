@@ -30,10 +30,9 @@ def main():
 
         # Đăng nhập Facebook (Thay thế bằng hàm đăng nhập thực tế nếu cần)
         base_page.login_facebook(email_facebook, password_facebook)
-        time.sleep(60)
 
         # Crawl bài viết mới
-        group_url = "https://www.facebook.com/tlinhww"  # Link group hoặc page cần crawl
+        group_url = "https://www.facebook.com/PageGameReplay"  # Link group hoặc page cần crawl
         num_posts = 3
         existing_posts = base_page.read_existing_posts(output_file)
         new_posts = base_page.crawl_posts(group_url, num_posts, existing_posts)
