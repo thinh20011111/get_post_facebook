@@ -1,0 +1,62 @@
+{
+    "account_1": {
+        "url1": "https://stagv1.emso.vn/page/1977vlog",
+        "url2": "https://www.facebook.com/1977vlog",
+        "username": "testeremso6@gmail.com",
+        "password": "khongnhomatkhaucu"
+    },
+    "account_2": {
+        "url1": "https://stagv1.emso.vn/page/Giadinhdzanhoa",
+        "url2": "https://www.facebook.com/Giadinhdzanhoa",
+        "username": "testeremso6@gmail.com",
+        "password": "khongnhomatkhaucu"
+    },
+    "account_3": {
+        "url1": "https://stagv1.emso.vn/page/AnhAoDenYeah1",
+        "url2": "https://www.facebook.com/AnhAoDenYeah1",
+        "username": "testeremso6@gmail.com",
+        "password": "khongnhomatkhaucu"
+    },
+    "account_4": {
+        "url1": "https://stagv1.emso.vn/page/CKG.ChickenGang",
+        "url2": "https://www.facebook.com/CKG.ChickenGang",
+        "username": "testeremso6@gmail.com",
+        "password": "khongnhomatkhaucu"
+    },
+    "account_5": {
+        "url1": "https://stagv1.emso.vn/page/xalo.dict",
+        "url2": "https://www.facebook.com/xalo.dict",
+        "username": "testeremso6@gmail.com",
+        "password": "khongnhomatkhaucu"
+    },
+    "account_6": {
+        "url1": "https://stagv1.emso.vn/page/womannews.vn",
+        "url2": "https://www.facebook.com/womannews.vn",
+        "username": "testeremso6@gmail.com",
+        "password": "khongnhomatkhaucu"
+    },
+    "account_7": {
+        "url1": "https://stagv1.emso.vn/page/5min.crafts.uk",
+        "url2": "https://www.facebook.com/5min.crafts.uk",
+        "username": "testeremso6@gmail.com",
+        "password": "khongnhomatkhaucu"
+    },
+    "account_8": {
+        "url1": "https://stagv1.emso.vn/page/thepetcollective",
+        "url2": "https://www.facebook.com/thepetcollective",
+        "username": "testeremso6@gmail.com",
+        "password": "khongnhomatkhaucu"
+    },
+    "account_9": {
+        "url1": "https://staging-fe.emso.vn/page/anhdadenchuanmen",
+        "url2": "https://www.facebook.com/anhdadenchuanmen",
+        "username": "s1456a2@gmail.com",
+        "password": "khongnhomatkhaucu"
+    },
+    "account_10": {
+        "url1": "https://stagv1.emso.vn/page/bbcnews",
+        "url2": "https://www.facebook.com/bbcnews",
+        "username": "testeremso6@gmail.com",
+        "password": "khongnhomatkhaucu"
+    }
+}
