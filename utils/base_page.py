@@ -191,44 +191,43 @@ class BasePage:
                 try:
                     # Click the post (this will navigate to the post details)
                     self.click_element(self.POST.replace("{index}", str(index)))
-                    if self.is_element_present_by_xpath(self.TITLE_POST):
-                        # Use get_title_and_media function to extract title and media
-                        post_data = self.get_title_and_media()
+                    WebDriverWait(self.driver, 3).until(EC.presence_of_element_located((By.XPATH, self.TITLE_POST)))  # Ensure post loads
 
-                        # Check if the post has valid title and media
-                        title = post_data["title"]
-                        media = post_data["media"]
-                        media_files = []  # List to store media file names
+                    # Use get_title_and_media function to extract title and media
+                    post_data = self.get_title_and_media()
 
-                        # Save images directly into the MEDIA_DIR
-                        for i, img_url in enumerate(media):
-                            try:
-                                # Create filename for the image
-                                img_filename = f"media_{len(posts) + 1}_{i + 1}.jpg"
-                                img_path = os.path.join(self.MEDIA_DIR, img_filename)
+                    # Check if the post has valid title and media
+                    title = post_data["title"]
+                    media = post_data["media"]
+                    media_files = []  # List to store media file names
 
-                                # Download and save the image into MEDIA_DIR
-                                response = requests.get(img_url)
-                                with open(img_path, "wb") as file:
-                                    file.write(response.content)
+                    # Save images directly into the MEDIA_DIR
+                    for i, img_url in enumerate(media):
+                        try:
+                            # Create filename for the image
+                            img_filename = f"media_{len(posts) + 1}_{i + 1}.jpg"
+                            img_path = os.path.join(self.MEDIA_DIR, img_filename)
 
-                                # Save filename to the list
-                                media_files.append(img_filename)
-                            except Exception as e:
-                                print(f"Error downloading image {i + 1}: {e}")
+                            # Download and save the image into MEDIA_DIR
+                            response = requests.get(img_url)
+                            with open(img_path, "wb") as file:
+                                file.write(response.content)
 
-                        # Add post to the list
-                        posts.append({"title": title, "media": media_files})
-                        existing_posts[title] = True
+                            # Save filename to the list
+                            media_files.append(img_filename)
+                        except Exception as e:
+                            print(f"Error downloading image {i + 1}: {e}")
 
-                        if len(posts) >= num_posts:
-                            break
-                    else:
-                        self.driver.back() 
+                    # Add post to the list
+                    posts.append({"title": title, "media": media_files})
+                    existing_posts[title] = True
+
+                    if len(posts) >= num_posts:
+                        break
+
                 except Exception as e:
-                    print(f"Error processing post {index}: {e}")
+                    print(f"Error processing post {index}:")
                     self.driver.back()  # Ensure we go back even if an error occurs
-                    time.sleep(1)
 
         print(f"Crawled {len(posts)} new posts.")
         return posts

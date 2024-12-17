@@ -42,58 +42,55 @@ def main():
         base_page.login_facebook(email_facebook, password_facebook)
 
         # Biến theo dõi tài khoản EMSo hiện tại
-        current_emso_account = None
+        emso_username = "testeremso6@gmail.com"
+        emso_password = "khongnhomatkhaucu"
 
         # Lặp qua tất cả các tài khoản và xử lý
         for account_key, account_data in accounts_data.items():
-            print(f"\nĐang xử lý tài khoản: {account_key}")
+            try:
+                print(f"\nĐang xử lý tài khoản: {account_key}")
 
-            # Lấy thông tin từ tài khoản (url1, url2, username, password)
-            group_url = account_data["url2"]
-            emso_username = account_data["username"]
-            emso_password = account_data["password"]
-            url1 = account_data["url1"]
+                # Lấy thông tin từ tài khoản (url1, url2, username, password)
+                group_url = account_data["url2"]
+                emso_username = account_data["username"]
+                emso_password = account_data["password"]
+                url1 = account_data["url1"]
 
-            # Crawl bài viết mới từ Facebook group_url
-            num_posts = 3
-            existing_posts = base_page.read_existing_posts(output_file)
-            new_posts = base_page.crawl_posts(group_url, num_posts, existing_posts)
+                # Crawl bài viết mới từ Facebook group_url
+                num_posts = 3
+                existing_posts = base_page.read_existing_posts(output_file)
+                new_posts = base_page.crawl_posts(group_url, num_posts, existing_posts)
 
-            # Kiểm tra nếu không có bài viết mới
-            if not new_posts:
-                print("Không có bài viết mới để crawl. Bỏ qua tài khoản EMSo này.")
-                continue  # Bỏ qua tài khoản EMSo này và chuyển sang tài khoản tiếp theo
+                # Kiểm tra nếu không có bài viết mới
+                if not new_posts:
+                    print("Không có bài viết mới để crawl. Bỏ qua tài khoản EMSo này.")
+                    continue  # Bỏ qua tài khoản EMSo này và chuyển sang tài khoản tiếp theo
 
-            # Lưu bài viết vào file JSON nếu có bài mới
-            base_page.save_to_json(group_url, new_posts, output_file)
-            print(f"Đã lưu {len(new_posts)} bài viết mới vào file {output_file}.")
+                # Lưu bài viết vào file JSON nếu có bài mới
+                base_page.save_to_json(group_url, new_posts, output_file)
+                print(f"Đã lưu {len(new_posts)} bài viết mới vào file {output_file}.")
 
-            # Kiểm tra xem tài khoản EMSo đã thay đổi hay chưa
-            if current_emso_account != emso_username:
-                if current_emso_account:
-                    # Đăng xuất tài khoản EMSo cũ nếu đã có tài khoản đăng nhập trước đó
-                    print(f"Đăng xuất khỏi tài khoản EMSo: {current_emso_account}")
-                    base_page.logout()
-                    time.sleep(1)
-
-                # Đăng nhập tài khoản EMSo mới
-                print(f"Đăng nhập vào tài khoản EMSo: {emso_username}")
                 base_page.login_emso(config.EMSO_URL, emso_username, emso_password)
-                current_emso_account = emso_username
 
-            # Truy cập vào url1 và đăng bài
-            print(f"Truy cập vào URL: {url1}")
-            base_page.driver.get(url1)
-            for post in new_posts:
-                title = post.get("title", "")
-                image_paths = post.get("media", "")
-                base_page.create_post(title, image_paths)
-                print(f"Đã đăng bài: {title}")
+                # Truy cập vào url1 và đăng bài
+                print(f"Truy cập vào URL: {url1}")
+                base_page.driver.get(url1)
+                for post in new_posts:
+                    title = post.get("title", "")
+                    image_paths = post.get("media", "")
+                    base_page.create_post(title, image_paths)
+                    print(f"Đã đăng bài: {title}")
+                base_page.logout()
+
+            except Exception as e:
+                print(f"Đã gặp lỗi khi xử lý tài khoản {account_key}: {e}")
+                continue  # Tiếp tục với tài khoản tiếp theo nếu gặp lỗi
 
         print("Hoàn tất tất cả các bài đăng.")
 
     finally:
         driver.quit()
+
 
 if __name__ == "__main__":
     main()
