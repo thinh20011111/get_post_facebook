@@ -199,6 +199,15 @@ class BasePage:
                     # Check if the post has valid title and media
                     title = post_data["title"]
                     media = post_data["media"]
+                    if not title or not media:
+                        continue  # Skip posts without title or media
+
+                    # Skip post if it already exists in the existing posts
+                    if title in existing_posts:
+                        print(f"Post '{title}' already exists, skipping.")
+                        self.driver.back()  # Go back to post list
+                        continue
+
                     media_files = []  # List to store media file names
 
                     # Save images directly into the MEDIA_DIR
@@ -220,14 +229,14 @@ class BasePage:
 
                     # Add post to the list
                     posts.append({"title": title, "media": media_files})
-                    existing_posts[title] = True
+                    existing_posts[title] = True  # Mark this post as existing
 
                     if len(posts) >= num_posts:
                         break
 
                 except Exception as e:
-                    print(f"Error processing post {index}:")
-                    self.driver.back()  # Ensure we go back even if an error occurs
+                    print(f"Error processing post {index}: {e}")
+                    self.driver.back()  # Go back to post list
 
         print(f"Crawled {len(posts)} new posts.")
         return posts
@@ -264,8 +273,18 @@ class BasePage:
                         print(f"Error decoding JSON from {output_file}. The file might be corrupted.")
                         return  # Nếu file bị lỗi, dừng lại
 
-            # Lưu username vào data
-            data[username] = posts
+            # Lấy các bài viết đã tồn tại từ group trong file
+            existing_group_posts = data.get(username, [])
+
+            # Lọc các bài viết mới, bỏ qua những bài đã tồn tại trong file
+            existing_titles = {post["title"] for post in existing_group_posts}
+            new_posts = [post for post in posts if post["title"] not in existing_titles]
+
+            # Thêm bài viết mới vào danh sách cũ
+            if username not in data:
+                data[username] = []
+
+            data[username].extend(new_posts)
 
             # Lưu dữ liệu vào file JSON
             with open(output_file, "w", encoding="utf-8") as file:

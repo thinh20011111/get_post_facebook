@@ -53,7 +53,7 @@ def main():
                 url1 = account_data["url1"]
 
                 # Crawl bài viết mới từ Facebook group_url
-                num_posts = 1
+                num_posts = 3
                 existing_posts = base_page.read_existing_posts(output_file)
                 new_posts = base_page.crawl_posts(group_url, num_posts, existing_posts)
 
