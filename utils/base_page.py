@@ -51,6 +51,7 @@ class BasePage:
     CLOSE_DETAIL = "/html/body/div[1]/div/div/div[1]/div/div[2]/div[1]/a"
     MEDIA = "/html/body/div[1]/div/div/div[1]/div/div[5]/div/div/div[3]/div[2]/div/div[2]"
     MEDIA_IN_DETAIL = "/html/body/div[1]/div/div/div[1]/div/div[6]/div/div/div[2]/div/div/div/div/div/div/div/div[2]/div[2]/div/div/div/div/div/div/div/div/div/div/div/div/div[13]/div/div/div[3]"
+    LIST_MEDIA = "/html[1]/body[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[3]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[4]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[2]/div[1]/div[1]/div[1]/div[2]/a[1]/div[1]//span[starts-with(text(), 'Ảnh của')]"
     
     def find_element(self, locator_type, locator_value):
         return self.driver.find_element(locator_type, locator_value)
@@ -84,11 +85,17 @@ class BasePage:
     
     def click_element(self, xpath: str, timeout=15):
         try:
+            # Chờ đợi phần tử có thể click được
             element = self.wait_for_element_clickable(xpath, timeout)
-            # Cuộn đến phần tử nếu cần
-            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
-            element.click()
-            # print(f"Clicked on element with XPath: {xpath}")
+            
+            # Cuộn đến phần tử nếu nó nằm ngoài viewport
+            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center', behavior: 'smooth'});", element)
+            
+            # Kiểm tra nếu phần tử bị che khuất hoặc không thể click
+            if element.is_displayed() and element.is_enabled():
+                element.click()
+            else:
+                raise Exception(f"Element with XPath '{xpath}' is either not visible or not enabled.")
         except Exception as e:
             print(f"Error while clicking element with XPath '{xpath}': {e}")
             raise
@@ -182,7 +189,7 @@ class BasePage:
         self.driver.get(group_url)
         WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.XPATH, self.MEDIA_TAB)))  # Ensure the media tab is loaded
         self.click_element(self.MEDIA_TAB)
-        time.sleep(2)
+        self.click_element(self.LIST_MEDIA)
 
         posts = []
         while len(posts) < num_posts:
