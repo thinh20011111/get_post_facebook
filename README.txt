@@ -1,0 +1,5 @@
+- chạy lệnh "pip install -r requirements.txt"
+- chuẩn bị data ở file "data_page.csv"
+- chạy lệnh: "python convert_file.py" dể convert file sang json 
+- thay tài khoản mật khẩu facebook ở file: "data.json"
+- chạy crawl post: python main.py
