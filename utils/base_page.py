@@ -235,7 +235,7 @@ class BasePage:
                         break
 
                 except Exception as e:
-                    print(f"Error processing post {index}: {e}")
+                    print(f"Post no title or error when crawl at {index}")
                     self.driver.back()  # Go back to post list
 
         print(f"Crawled {len(posts)} new posts.")
