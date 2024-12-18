@@ -191,7 +191,7 @@ class BasePage:
                 try:
                     # Click the post (this will navigate to the post details)
                     self.click_element(self.POST.replace("{index}", str(index)))
-                    WebDriverWait(self.driver, 3).until(EC.presence_of_element_located((By.XPATH, self.TITLE_POST)))  # Ensure post loads
+                    WebDriverWait(self.driver, 5).until(EC.presence_of_element_located((By.XPATH, self.TITLE_POST)))  # Ensure post loads
 
                     # Use get_title_and_media function to extract title and media
                     post_data = self.get_title_and_media()
@@ -357,6 +357,7 @@ class BasePage:
     # Đăng bài lên Facebook (giả định)
     def create_post(self, title, image_name):
         # Mở form tạo bài đăng
+        WebDriverWait(self.driver, 30).until(EC.presence_of_element_located((By.XPATH, self.OPEN_FORM)))  # Ensure post loads
         self.click_element(self.OPEN_FORM)
 
         # Nhập tiêu đề bài đăng
@@ -369,30 +370,30 @@ class BasePage:
         self.click_element(self.CREATE_POST_BUTTON)
         time.sleep(5)  # Đợi một chút để quá trình đăng bài hoàn tất
     
-    # Hàm chính kiểm tra và đăng bài
-    def process_post(self, group_url, accounts_filename, posts_filename):
-        # Trích xuất Page Name từ URL
-        pagename = group_url.split("/")[-1]  # Lấy phần cuối của URL để làm page name
+    # # Hàm chính kiểm tra và đăng bài
+    # def process_post(self, group_url, accounts_filename, posts_filename):
+    #     # Trích xuất Page Name từ URL
+    #     pagename = group_url.split("/")[-1]  # Lấy phần cuối của URL để làm page name
 
-        # Đọc dữ liệu tài khoản từ file JSON
-        accounts_data = self.read_accounts_from_json(accounts_filename)
+    #     # Đọc dữ liệu tài khoản từ file JSON
+    #     accounts_data = self.read_accounts_from_json(accounts_filename)
 
-        # Kiểm tra nếu pagename có trong tài khoản
-        if pagename in accounts_data:
-            print(f"Trang {pagename} có trong tài khoản, bắt đầu đăng bài.")
+    #     # Kiểm tra nếu pagename có trong tài khoản
+    #     if pagename in accounts_data:
+    #         print(f"Trang {pagename} có trong tài khoản, bắt đầu đăng bài.")
 
-            # Đọc các bài viết từ file facebook_posts.json
-            posts = self.read_posts_from_json(posts_filename, pagename)
+    #         # Đọc các bài viết từ file facebook_posts.json
+    #         posts = self.read_posts_from_json(posts_filename, pagename)
 
-            # Đăng tất cả các bài viết của trang
-            for post in posts:
-                # Lấy tiêu đề bài đăng
-                title = post.get("title", "")
+    #         # Đăng tất cả các bài viết của trang
+    #         for post in posts:
+    #             # Lấy tiêu đề bài đăng
+    #             title = post.get("title", "")
 
-                # Lấy đường dẫn ảnh từ trường "media"
-                image_paths = post.get("media", [])
+    #             # Lấy đường dẫn ảnh từ trường "media"
+    #             image_paths = post.get("media", [])
 
-                # Thực hiện đăng bài
-                self.create_post(title, self.FILE_INPUT_LOCATOR, image_paths)
-        else:
-            print(f"Trang {pagename} không tồn tại trong tài khoản.")
+    #             # Thực hiện đăng bài
+    #             self.create_post(title, self.FILE_INPUT_LOCATOR, image_paths)
+    #     else:
+    #         print(f"Trang {pagename} không tồn tại trong tài khoản.")
