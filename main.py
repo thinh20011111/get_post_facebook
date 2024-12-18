@@ -56,7 +56,7 @@ def main():
                 url1 = account_data["url1"]
 
                 # Crawl bài viết mới từ Facebook group_url
-                num_posts = 3
+                num_posts = 2
                 existing_posts = base_page.read_existing_posts(output_file)
                 new_posts = base_page.crawl_posts(group_url, num_posts, existing_posts)
 
@@ -83,10 +83,13 @@ def main():
                 base_page.logout()
 
             except Exception as e:
-                print(f"Đã gặp lỗi khi xử lý tài khoản {account_key}: {e}")
-                base_page.logout()
-                continue  # Tiếp tục với tài khoản tiếp theo nếu gặp lỗi
-
+                print(f"Đã gặp lỗi khi xử lý tài khoản {account_key}")
+                PROFILE_ACCOUNT_ICON = "//div[@id='root']/div/div/div/div/header/div/div/div[3]/div/div[2]/div[2]/i"
+                if base_page.is_element_present_by_xpath(PROFILE_ACCOUNT_ICON):
+                    base_page.logout()
+                    continue  # Tiếp tục với tài khoản tiếp theo nếu gặp lỗi`   
+                else:
+                    continue
         print("Hoàn tất tất cả các bài đăng.")
 
     finally:
