@@ -48,8 +48,9 @@ class BasePage:
     VIEW_DETAIL = "//a[text()='Xem bài viết']"
     CLOSE_DETAIL = "/html/body/div[1]/div/div/div[1]/div/div[2]/div[1]/a"
     MEDIA_IN_DETAIL = "/html/body/div[1]/div/div/div[1]/div/div[6]/div/div/div[2]/div/div/div/div/div/div/div/div[2]/div[2]/div/div/div/div/div/div/div/div/div/div/div/div/div[13]/div/div/div[3]"
-    TITLE_POST = "(//div[contains(@data-ad-preview, 'message')])[{index}]"
+    TITLE_POST = "(//div[contains(@data-ad-comet-preview, 'message')])[{index}]"
     MEDIA = "//div[@aria-posinset='{index}']"
+    MORE_OPTION = "(//div[@aria-haspopup='menu' and contains(@class, 'x1i10hfl') and contains(@aria-label, 'Hành động với bài viết này')])[{index}]"
     
     def find_element(self, locator_type, locator_value):
         return self.driver.find_element(locator_type, locator_value)
@@ -151,6 +152,8 @@ class BasePage:
             # Lấy title và media từ view ban đầu (không có view detail)
             title_xpath = self.TITLE_POST.replace("{index}", str(index))
             media_xpath = self.MEDIA.replace("{index}", str(index))
+            
+            # self.wait_for_element_present(title_xpath)
 
             # Tìm phần tử title và media
             title_element = self.driver.find_element(By.XPATH, title_xpath)
@@ -164,7 +167,7 @@ class BasePage:
 
             # Nếu không có title hoặc media, bỏ qua
             if not title or not img_elements:
-                return {"title": "", "media": []}
+                return {"title": "", "media": [], "hashtags": []}
 
             # Lọc các ảnh có width > 50px
             images = []
@@ -177,12 +180,14 @@ class BasePage:
                     if img_url:
                         images.append(img_url)
 
-            # Trả về title và media (ảnh hợp lệ)
-            return {"title": title, "media": images}
+            # Tìm các hashtag trong title
+            hashtags = re.findall(r"#\S+", title)
+
+            # Trả về title, media (ảnh hợp lệ), và danh sách hashtag
+            return {"title": title, "media": images, "hashtags": hashtags}
 
         except Exception as e:
-            print(f"Error extracting title and media: {e}")
-            return {"title": "", "media": []}  # Nếu có lỗi, trả về title và media trống
+            return {"title": "", "media": [], "hashtags": []} 
 
     def crawl_posts(self, group_url, num_posts, existing_posts):
         print(f"Crawling posts from: {group_url}")
@@ -194,7 +199,7 @@ class BasePage:
         while len(posts) < num_posts:
             try:
                 # Cuộn trang để tìm các bài viết
-                self.scroll_page_to_load_posts()
+                self.scroll_page_to_load_posts(index)
 
                 # Tìm title và media ở vị trí index
                 post_data = self.get_title_and_media(index)
@@ -248,10 +253,25 @@ class BasePage:
         print(f"Crawled {len(posts)} new posts.")
         return posts
 
-    def scroll_page_to_load_posts(self):
-        # Cuộn trang để tải thêm bài viết nếu cần thiết
-        self.driver.execute_script("window.scrollBy(0, 300);")
-        time.sleep(2)  # Đợi 2 giây để trang tải thêm
+    def scroll_page_to_load_posts(self, index):
+        try:
+            # Định nghĩa XPath của phần tử MEDIA
+            media_xpath = self.MEDIA.replace("{index}", str(index))
+            
+            # Sau khi phần tử xuất hiện, cuộn đến phần tử đó
+            media_element = self.driver.find_element(By.XPATH, media_xpath)
+            
+            # Tính toán một nửa chiều cao của phần tử để cuộn đến giữa phần tử
+            scroll_position = media_element.location['y'] # Tính vị trí giữa phần tử
+            
+            self.click_element(self.MORE_OPTION.replace("{index}", str(index)))
+
+            # Cuộn đến giữa phần tử
+            self.driver.execute_script(f"window.scrollTo(0, {scroll_position});")
+            time.sleep(2)  # Đợi 2 giây sau khi cuộn đến vị trí giữa phần tử
+
+        except Exception as e:
+            print(f"Error while scrolling: {e}")
         
     @staticmethod
     def extract_username_from_url(url):
@@ -387,5 +407,25 @@ class BasePage:
 
         except Exception as e:
             print(f"Error creating post: {e}")
+    
+    def clear_media_folder():
+        try:
+            # Lấy đường dẫn thư mục 'media' trong cùng thư mục với chương trình
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            media_folder_path = os.path.join(current_dir, "media")
+            
+            # Kiểm tra nếu thư mục tồn tại
+            if not os.path.exists(media_folder_path):
+                print(f"Thư mục {media_folder_path} không tồn tại.")
+                return
+
+            # Xóa tất cả tệp trong thư mục
+            for file_name in os.listdir(media_folder_path):
+                file_path = os.path.join(media_folder_path, file_name)
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+            print(f"Đã xóa tất cả các tệp trong thư mục: {media_folder_path}")
+        except Exception as e:
+            print(f"Lỗi khi xóa thư mục media: {e}")
 
     

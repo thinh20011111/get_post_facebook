@@ -79,7 +79,10 @@ def main():
                     image_paths = post.get("media", "")
                     base_page.create_post(title, image_paths)
                     print(f"Đã đăng bài: {title}")
-                    
+                
+                # Xóa folder media sau khi đăng bài
+                base_page.clear_media_folder()
+                
                 base_page.logout()
 
             except Exception as e:
