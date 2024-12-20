@@ -311,7 +311,17 @@ class BasePage:
         self.driver.get(page)
         post_data = []  # Danh sách để lưu dữ liệu của các bài post hợp lệ
         current_post_index = index_start  # Bắt đầu từ index_start
-        
+
+        # Đọc dữ liệu cũ nếu có từ tệp JSON
+        output_file = "post.json"
+        existing_data = {}
+        if os.path.exists(output_file):
+            try:
+                with open(output_file, "r", encoding="utf-8") as json_file:
+                    existing_data = json.load(json_file)
+            except Exception as json_err:
+                print(f"Lỗi khi đọc dữ liệu từ tệp JSON cũ: {json_err}")
+
         while len(post_data) < nums_post:  # Tiếp tục đến khi đủ nums_post hợp lệ
             try:
                 # Tạo XPath động cho phần tử chính (post)
@@ -340,7 +350,13 @@ class BasePage:
 
                 # Lấy text từ tất cả các phần tử message
                 messages = [message.text for message in message_elements]
-                
+
+                # Kiểm tra nếu messages đã tồn tại trong dữ liệu cũ
+                if any(post.get("messages") == messages for post in existing_data.get(page, [])):
+                    print(f"Post {current_post_index} với messages đã tồn tại, bỏ qua.")
+                    current_post_index += 1
+                    continue  # Bỏ qua bài đăng này nếu messages đã tồn tại
+
                 # Tìm các phần tử ảnh trong post
                 image_elements = post_element.find_elements(By.XPATH, ".//img")
                 image_urls = []
@@ -352,9 +368,9 @@ class BasePage:
                         img_url = img.get_attribute("src")
                         if img_url:
                             image_urls.append(img_url)
-                
+
+                # Kiểm tra nếu không có ảnh hợp lệ
                 if len(image_urls) == 0:
-                    # Nếu không có ảnh hợp lệ thì bỏ qua bài đăng này và tiếp tục với bài đăng tiếp theo
                     print(f"Post {current_post_index} không có ảnh hợp lệ (> 100px), bỏ qua.")
                     current_post_index += 1
                     continue  # Bỏ qua bài đăng này và tiếp tục với bài đăng tiếp theo
@@ -363,7 +379,6 @@ class BasePage:
                 media_dir = "media"
                 os.makedirs(media_dir, exist_ok=True)
                 image_paths = []
-                image_download_failed = False  # Biến kiểm tra xem có lỗi trong quá trình tải ảnh hay không
                 
                 for i, img_url in enumerate(image_urls):
                     try:
@@ -374,14 +389,16 @@ class BasePage:
                                 img_file.write(response.content)
                             image_paths.append(image_path)
                         else:
-                            # Nếu tải ảnh thất bại, đặt flag lỗi
-                            print(f"Lỗi khi tải ảnh từ {img_url}")
-                            image_download_failed = True
                             break  # Ngừng tải ảnh nếu có lỗi
-
                     except Exception:
                         print(f"Lỗi khi tải ảnh")
                         break  # Ngừng tải ảnh nếu có lỗi
+                
+                # Kiểm tra nếu không có ảnh hợp lệ (trong trường hợp image_paths vẫn rỗng)
+                if len(image_paths) == 0:
+                    print(f"Post {current_post_index} không có ảnh hợp lệ, bỏ qua.")
+                    current_post_index += 1
+                    continue  # Bỏ qua bài đăng này và tiếp tục với bài đăng tiếp theo
                 
                 # Lưu dữ liệu bài viết hợp lệ vào danh sách
                 post_data.append({
@@ -403,12 +420,17 @@ class BasePage:
                 print(f"Đã thu thập đủ {nums_post} bài đăng hợp lệ.")
                 break  # Dừng quá trình crawl khi đã đủ số lượng bài hợp lệ
 
-        # Lưu dữ liệu vào tệp JSON khi đã thu thập đủ bài hợp lệ
+        # Thêm dữ liệu mới vào existing_data mà không ghi đè
         if post_data:
-            output_file = "post.json"
+            if page in existing_data:
+                existing_data[page].extend(post_data)  # Thêm các bài mới vào danh sách cũ
+            else:
+                existing_data[page] = post_data  # Nếu chưa có trang này trong dữ liệu cũ, thêm mới
+
+            # Lưu dữ liệu vào tệp JSON khi đã thu thập đủ bài hợp lệ
             try:
                 with open(output_file, "w", encoding="utf-8") as json_file:
-                    json.dump({page: post_data}, json_file, ensure_ascii=False, indent=4)
+                    json.dump(existing_data, json_file, ensure_ascii=False, indent=4)
                 print(f"Dữ liệu đã được lưu vào {output_file}")
             except Exception as json_err:
                 print(f"Lỗi khi lưu dữ liệu vào tệp JSON: {json_err}")
