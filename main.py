@@ -56,7 +56,7 @@ def main():
                 url1 = account_data["url1"]
 
                 # Crawl bài viết mới từ Facebook group_url
-                num_posts = 15
+                num_posts = 3
                 base_page.scroll_to_element_and_crawl(num_posts, group_url)
                 
                 # base_page.logout()

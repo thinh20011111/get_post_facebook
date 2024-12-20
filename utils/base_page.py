@@ -307,13 +307,18 @@ class BasePage:
             print(f"Lỗi khi xóa thư mục media: {e}")
 
     # ====================================================================================================
-
     def scroll_to_element_and_crawl(self, nums_post, page, index_start=1):
         self.driver.get(page)
-        for index in range(index_start, nums_post + 1):
+        post_data = []  # Danh sách để lưu dữ liệu của các bài post hợp lệ
+        current_post_index = index_start  # Bắt đầu từ index_start
+        
+        while len(post_data) < nums_post:  # Tiếp tục đến khi đủ nums_post hợp lệ
             try:
                 # Tạo XPath động cho phần tử chính (post)
-                post_xpath = self.POST.replace("{index}", str(index))
+                post_xpath = self.POST.replace("{index}", str(current_post_index))
+                
+                # Đợi cho đến khi phần tử được tải xong
+                WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.XPATH, post_xpath)))
                 
                 # Tìm phần tử chính bằng XPath
                 post_element = self.driver.find_element(By.XPATH, post_xpath)
@@ -324,19 +329,86 @@ class BasePage:
                 # Chờ để đảm bảo phần tử đã tải đầy đủ
                 time.sleep(2)
                 
-                # Tìm các phần tử con trong element post tại vị trí index
+                # Tìm các phần tử con trong element post tại vị trí index (title có thể là message đầu tiên)
                 message_elements = post_element.find_elements(By.XPATH, ".//div[contains(@data-ad-comet-preview, 'message')]")
                 
-                if not message_elements:
-                    print(f"Không tìm thấy message element trong post tại index {index}")
-                
+                # Kiểm tra nếu bài đăng có message (được coi là title)
+                if not message_elements or not message_elements[0].text.strip():
+                    print(f"Post {current_post_index} không có title hợp lệ, bỏ qua.")
+                    current_post_index += 1
+                    continue  # Bỏ qua bài đăng này và tiếp tục với bài đăng tiếp theo
+
                 # Lấy text từ tất cả các phần tử message
                 messages = [message.text for message in message_elements]
                 
-                # In hoặc xử lý văn bản tùy ý
-                for msg in messages:
-                    print(f"Post {index}: {msg}")
+                # Tìm các phần tử ảnh trong post
+                image_elements = post_element.find_elements(By.XPATH, ".//img")
+                image_urls = []
+
+                for img in image_elements:
+                    # Kiểm tra kích thước ảnh bằng `naturalWidth`
+                    img_width = self.driver.execute_script("return arguments[0].naturalWidth;", img)
+                    if img_width >= 100:
+                        img_url = img.get_attribute("src")
+                        if img_url:
+                            image_urls.append(img_url)
+                
+                if len(image_urls) == 0:
+                    # Nếu không có ảnh hợp lệ thì bỏ qua bài đăng này và tiếp tục với bài đăng tiếp theo
+                    print(f"Post {current_post_index} không có ảnh hợp lệ (> 100px), bỏ qua.")
+                    current_post_index += 1
+                    continue  # Bỏ qua bài đăng này và tiếp tục với bài đăng tiếp theo
+
+                # Tải xuống và lưu các ảnh vào thư mục "media"
+                media_dir = "media"
+                os.makedirs(media_dir, exist_ok=True)
+                image_paths = []
+                image_download_failed = False  # Biến kiểm tra xem có lỗi trong quá trình tải ảnh hay không
+                
+                for i, img_url in enumerate(image_urls):
+                    try:
+                        response = requests.get(img_url, stream=True)
+                        if response.status_code == 200:
+                            image_path = os.path.join(media_dir, f"page_{current_post_index}_img_{i}.jpg")
+                            with open(image_path, "wb") as img_file:
+                                img_file.write(response.content)
+                            image_paths.append(image_path)
+                        else:
+                            # Nếu tải ảnh thất bại, đặt flag lỗi
+                            print(f"Lỗi khi tải ảnh từ {img_url}")
+                            image_download_failed = True
+                            break  # Ngừng tải ảnh nếu có lỗi
+
+                    except Exception:
+                        print(f"Lỗi khi tải ảnh")
+                        break  # Ngừng tải ảnh nếu có lỗi
+                
+                # Lưu dữ liệu bài viết hợp lệ vào danh sách
+                post_data.append({
+                    "post_index": current_post_index,
+                    "messages": messages,
+                    "images": image_paths
+                })
+                
+                print(f"Đã xử lý post {current_post_index}. Text: {messages}, Ảnh hợp lệ: {len(image_paths)}")
             
             except Exception as e:
-                print(f"Lỗi khi xử lý phần tử tại index {index}: {e}")
-                break
+                print(f"Lỗi khi xử lý phần tử tại index {current_post_index}: {e}")
+            
+            # Tăng index để tiếp tục cuộn và kiểm tra bài đăng tiếp theo
+            current_post_index += 1
+            
+            # Kiểm tra nếu đã đủ số lượng bài hợp lệ
+            if len(post_data) >= nums_post:
+                print(f"Đã thu thập đủ {nums_post} bài đăng hợp lệ.")
+                break  # Dừng quá trình crawl khi đã đủ số lượng bài hợp lệ
+
+        # Lưu dữ liệu vào tệp JSON khi đã thu thập đủ bài hợp lệ
+        if post_data:
+            output_file = "post.json"
+            try:
+                with open(output_file, "w", encoding="utf-8") as json_file:
+                    json.dump({page: post_data}, json_file, ensure_ascii=False, indent=4)
+                print(f"Dữ liệu đã được lưu vào {output_file}")
+            except Exception as json_err:
+                print(f"Lỗi khi lưu dữ liệu vào tệp JSON: {json_err}")
