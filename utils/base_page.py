@@ -46,11 +46,10 @@ class BasePage:
     POSTS = "/html/body/div[1]/div/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div/div/div[4]/div/div/div/div/div/div/div/div/div[3]/div[1]/div"
     POST = "/html/body/div[1]/div/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div/div/div[4]/div/div/div/div/div/div/div/div/div[3]/div[1]/div[{index}]"
     VIEW_DETAIL = "//a[text()='Xem bài viết']"
-    TITLE_POST_DETAIL = "//div[contains(@data-ad-preview, 'message')]"
-    TITLE_POST = "/html/body/div[1]/div/div/div[1]/div/div[5]/div/div/div[3]/div[2]/div/div[3]/div[2]/div/div/div[1]/div[1]/div[1]/div[2]/span"
     CLOSE_DETAIL = "/html/body/div[1]/div/div/div[1]/div/div[2]/div[1]/a"
-    MEDIA = "/html/body/div[1]/div/div/div[1]/div/div[5]/div/div/div[3]/div[2]/div/div[2]"
     MEDIA_IN_DETAIL = "/html/body/div[1]/div/div/div[1]/div/div[6]/div/div/div[2]/div/div/div/div/div/div/div/div[2]/div[2]/div/div/div/div/div/div/div/div/div/div/div/div/div[13]/div/div/div[3]"
+    TITLE_POST = "(//div[contains(@data-ad-preview, 'message')])[{index}]"
+    MEDIA = "//div[@aria-posinset='{index}']"
     
     def find_element(self, locator_type, locator_value):
         return self.driver.find_element(locator_type, locator_value)
@@ -147,30 +146,38 @@ class BasePage:
             data = json.load(f, strict = False)
         return data
 
-    def get_title_and_media(self):
+    def get_title_and_media(self, index):
         try:
             # Lấy title và media từ view ban đầu (không có view detail)
-            title_element = self.driver.find_element(By.XPATH, self.TITLE_POST)
-            media_element = self.driver.find_element(By.XPATH, self.MEDIA)
+            title_xpath = self.TITLE_POST.replace("{index}", str(index))
+            media_xpath = self.MEDIA.replace("{index}", str(index))
+
+            # Tìm phần tử title và media
+            title_element = self.driver.find_element(By.XPATH, title_xpath)
+            media_element = self.driver.find_element(By.XPATH, media_xpath)
 
             # Lấy text của title
             title = title_element.get_attribute("innerText").strip()
 
-            # Lấy media (hình ảnh) từ phần media
-            media_elements = media_element.find_elements(By.XPATH, ".//img[contains(@src, 'fbcdn.net')]")
+            # Tìm các thẻ img trong phần media
+            img_elements = media_element.find_elements(By.XPATH, ".//img[contains(@src, 'fbcdn.net')]")
 
             # Nếu không có title hoặc media, bỏ qua
-            if not title or not media_elements:
+            if not title or not img_elements:
                 return {"title": "", "media": []}
 
-            # Lấy URL của các ảnh media
+            # Lọc các ảnh có width > 50px
             images = []
-            for img in media_elements:
-                img_url = img.get_attribute("src")
-                if img_url:
-                    images.append(img_url)
+            for img in img_elements:
+                # Sử dụng JavaScript để lấy Rendered size (naturalWidth) của ảnh
+                width = self.driver.execute_script("return arguments[0].naturalWidth;", img)
 
-            # Trả về title và media
+                if width > 50:  # Chỉ lấy ảnh có kích thước width > 50px
+                    img_url = img.get_attribute("src")
+                    if img_url:
+                        images.append(img_url)
+
+            # Trả về title và media (ảnh hợp lệ)
             return {"title": title, "media": images}
 
         except Exception as e:
@@ -180,67 +187,72 @@ class BasePage:
     def crawl_posts(self, group_url, num_posts, existing_posts):
         print(f"Crawling posts from: {group_url}")
         self.driver.get(group_url)
-        WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.XPATH, self.MEDIA_TAB)))  # Ensure the media tab is loaded
-        self.click_element(self.MEDIA_TAB)
         time.sleep(2)
 
         posts = []
+        index = 1  # Bắt đầu từ index = 1
         while len(posts) < num_posts:
-            post_elements = self.driver.find_elements(By.XPATH, self.POSTS)
-            for index, post in enumerate(post_elements, start=1):
-                try:
-                    # Click the post (this will navigate to the post details)
-                    self.click_element(self.POST.replace("{index}", str(index)))
-                    WebDriverWait(self.driver, 5).until(EC.presence_of_element_located((By.XPATH, self.TITLE_POST)))  # Ensure post loads
+            try:
+                # Cuộn trang để tìm các bài viết
+                self.scroll_page_to_load_posts()
 
-                    # Use get_title_and_media function to extract title and media
-                    post_data = self.get_title_and_media()
+                # Tìm title và media ở vị trí index
+                post_data = self.get_title_and_media(index)
 
-                    # Check if the post has valid title and media
-                    title = post_data["title"]
-                    media = post_data["media"]
-                    if not title or not media:
-                        continue  # Skip posts without title or media
+                # Kiểm tra nếu có title và media
+                title = post_data["title"]
+                media = post_data["media"]
+                if not title or not media:
+                    index += 1  # Nếu không có title hoặc media, chuyển sang bài tiếp theo
+                    continue
 
-                    # Skip post if it already exists in the existing posts
-                    if title in existing_posts:
-                        print(f"Post '{title}' already exists, skipping.")
-                        self.driver.back()  # Go back to post list
-                        continue
+                # Kiểm tra nếu có video, bỏ qua
+                video_elements = self.driver.find_elements(By.XPATH, f"//div[@aria-posinset='{index}']//video")
+                if video_elements:
+                    print(f"Video found at index {index}, skipping.")
+                    index += 1  # Bỏ qua nếu có video
+                    continue
 
-                    media_files = []  # List to store media file names
+                # Lưu ảnh vào thư mục media
+                media_files = []  # Danh sách lưu tên file hình ảnh
+                for i, img_url in enumerate(media):
+                    try:
+                        # Tạo tên file cho hình ảnh
+                        img_filename = f"media_{len(posts) + 1}_{i + 1}.jpg"
+                        img_path = os.path.join(self.MEDIA_DIR, img_filename)
 
-                    # Save images directly into the MEDIA_DIR
-                    for i, img_url in enumerate(media):
-                        try:
-                            # Create filename for the image
-                            img_filename = f"media_{len(posts) + 1}_{i + 1}.jpg"
-                            img_path = os.path.join(self.MEDIA_DIR, img_filename)
+                        # Tải và lưu ảnh vào MEDIA_DIR
+                        response = requests.get(img_url)
+                        with open(img_path, "wb") as file:
+                            file.write(response.content)
 
-                            # Download and save the image into MEDIA_DIR
-                            response = requests.get(img_url)
-                            with open(img_path, "wb") as file:
-                                file.write(response.content)
+                        # Lưu tên file vào danh sách
+                        media_files.append(img_filename)
+                    except Exception as e:
+                        print(f"Error downloading image {i + 1}: {e}")
 
-                            # Save filename to the list
-                            media_files.append(img_filename)
-                        except Exception as e:
-                            print(f"Error downloading image {i + 1}: {e}")
+                # Thêm bài viết vào danh sách
+                posts.append({"title": title, "media": media_files})
+                existing_posts[title] = True  # Đánh dấu bài viết đã tồn tại
 
-                    # Add post to the list
-                    posts.append({"title": title, "media": media_files})
-                    existing_posts[title] = True  # Mark this post as existing
+                # Dừng lại nếu đã crawl đủ số bài viết
+                if len(posts) >= num_posts:
+                    break
 
-                    if len(posts) >= num_posts:
-                        break
+                index += 1  # Tăng index để crawl bài tiếp theo
 
-                except Exception as e:
-                    print(f"Post no title or error when crawl at {index}")
-                    self.driver.back()  # Go back to post list
+            except Exception as e:
+                print(f"Error at index {index}: {e}")
+                index += 1  # Bỏ qua nếu có lỗi và chuyển sang bài viết tiếp theo
 
         print(f"Crawled {len(posts)} new posts.")
         return posts
 
+    def scroll_page_to_load_posts(self):
+        # Cuộn trang để tải thêm bài viết nếu cần thiết
+        self.driver.execute_script("window.scrollBy(0, 300);")
+        time.sleep(2)  # Đợi 2 giây để trang tải thêm
+        
     @staticmethod
     def extract_username_from_url(url):
         """
@@ -355,45 +367,25 @@ class BasePage:
         return posts_data.get(pagename, [])
 
     # Đăng bài lên Facebook (giả định)
-    def create_post(self, title, image_name):
-        # Mở form tạo bài đăng
-        WebDriverWait(self.driver, 30).until(EC.presence_of_element_located((By.XPATH, self.OPEN_FORM)))  # Ensure post loads
-        self.click_element(self.OPEN_FORM)
+    def create_post(self, title, image_names):
+        try:
+            # Mở form tạo bài đăng
+            WebDriverWait(self.driver, 30).until(EC.presence_of_element_located((By.XPATH, self.OPEN_FORM)))  # Ensure post loads
+            self.click_element(self.OPEN_FORM)
 
-        # Nhập tiêu đề bài đăng
-        self.input_text(self.INPUT_POST, title)
+            # Nhập tiêu đề bài đăng
+            self.input_text(self.INPUT_POST, title)
 
-        # Tải lên ảnh (nếu có)
-        self.upload_image(self.INPUT_MEDIA, image_name)
+            # Tải lên các ảnh (nếu có)
+            if image_names:
+                for image_name in image_names:
+                    self.upload_image(self.INPUT_MEDIA, image_name)  # Giả sử upload_image hỗ trợ tải ảnh
 
-        # Nhấn nút đăng bài
-        self.click_element(self.CREATE_POST_BUTTON)
-        time.sleep(5)  # Đợi một chút để quá trình đăng bài hoàn tất
+            # Nhấn nút đăng bài
+            self.click_element(self.CREATE_POST_BUTTON)
+            time.sleep(5)  # Đợi một chút để quá trình đăng bài hoàn tất
+
+        except Exception as e:
+            print(f"Error creating post: {e}")
+
     
-    # # Hàm chính kiểm tra và đăng bài
-    # def process_post(self, group_url, accounts_filename, posts_filename):
-    #     # Trích xuất Page Name từ URL
-    #     pagename = group_url.split("/")[-1]  # Lấy phần cuối của URL để làm page name
-
-    #     # Đọc dữ liệu tài khoản từ file JSON
-    #     accounts_data = self.read_accounts_from_json(accounts_filename)
-
-    #     # Kiểm tra nếu pagename có trong tài khoản
-    #     if pagename in accounts_data:
-    #         print(f"Trang {pagename} có trong tài khoản, bắt đầu đăng bài.")
-
-    #         # Đọc các bài viết từ file facebook_posts.json
-    #         posts = self.read_posts_from_json(posts_filename, pagename)
-
-    #         # Đăng tất cả các bài viết của trang
-    #         for post in posts:
-    #             # Lấy tiêu đề bài đăng
-    #             title = post.get("title", "")
-
-    #             # Lấy đường dẫn ảnh từ trường "media"
-    #             image_paths = post.get("media", [])
-
-    #             # Thực hiện đăng bài
-    #             self.create_post(title, self.FILE_INPUT_LOCATOR, image_paths)
-    #     else:
-    #         print(f"Trang {pagename} không tồn tại trong tài khoản.")
