@@ -56,34 +56,10 @@ def main():
                 url1 = account_data["url1"]
 
                 # Crawl bài viết mới từ Facebook group_url
-                num_posts = 2
-                existing_posts = base_page.read_existing_posts(output_file)
-                new_posts = base_page.crawl_posts(group_url, num_posts, existing_posts)
-
-                # Kiểm tra nếu không có bài viết mới
-                if not new_posts:
-                    print("Không có bài viết mới để crawl. Bỏ qua tài khoản EMSo này.")
-                    continue  # Bỏ qua tài khoản EMSo này và chuyển sang tài khoản tiếp theo
-
-                # Lưu bài viết vào file JSON nếu có bài mới
-                base_page.save_to_json(group_url, new_posts, output_file)
-                print(f"Đã lưu {len(new_posts)} bài viết mới vào file {output_file}.")
-
-                base_page.login_emso(config.EMSO_URL, emso_username, emso_password)
-
-                # Truy cập vào url1 và đăng bài
-                print(f"Truy cập vào URL: {url1}")
-                base_page.driver.get(url1)
-                for post in new_posts:
-                    title = post.get("title", "")
-                    image_paths = post.get("media", "")
-                    base_page.create_post(title, image_paths)
-                    print(f"Đã đăng bài: {title}")
+                num_posts = 15
+                base_page.scroll_to_element_and_crawl(num_posts, group_url)
                 
-                # Xóa folder media sau khi đăng bài
-                base_page.clear_media_folder()
-                
-                base_page.logout()
+                # base_page.logout()
 
             except Exception as e:
                 print(f"Đã gặp lỗi khi xử lý tài khoản {account_key}")

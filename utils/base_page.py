@@ -13,6 +13,7 @@ from PIL import Image
 from io import BytesIO
 import csv
 import pandas as pd
+import base64
 import requests
 import json
 import time
@@ -26,6 +27,10 @@ logging.basicConfig(
 class BasePage:
     def __init__(self, driver):
         self.driver = driver
+        self.driver = driver
+        self.media_dir = os.path.join(os.getcwd(), "media")
+        os.makedirs(self.media_dir, exist_ok=True)
+        self.output_file = "post.json"
     
     INPUT_USERNAME = "//input[@id='email']"
     INPUT_PASSWORD = "//input[@id='pass']"    
@@ -43,13 +48,11 @@ class BasePage:
     OPEN_FORM = "//p[text()='Ảnh/Video']"
     LOGOUT_BTN = "//header//div[@role= 'button' and ./div/p[text()='Đăng xuất']]"
     MEDIA_TAB = "//div[@class='html-div xdj266r x11i5rnm xat24cr x1mh8g0r xexx8yu x18d9i69 x6s0dn4 x9f619 x78zum5 x2lah0s x1hshjfz x1n2onr6 xng8ra x1pi30zi x1swvt13']/span[text()='Ảnh']"
-    POSTS = "/html/body/div[1]/div/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div/div/div[4]/div/div/div/div/div/div/div/div/div[3]/div[1]/div"
-    POST = "/html/body/div[1]/div/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div/div/div[4]/div/div/div/div/div/div/div/div/div[3]/div[1]/div[{index}]"
     VIEW_DETAIL = "//a[text()='Xem bài viết']"
     CLOSE_DETAIL = "/html/body/div[1]/div/div/div[1]/div/div[2]/div[1]/a"
     MEDIA_IN_DETAIL = "/html/body/div[1]/div/div/div[1]/div/div[6]/div/div/div[2]/div/div/div/div/div/div/div/div[2]/div[2]/div/div/div/div/div/div/div/div/div/div/div/div/div[13]/div/div/div[3]"
     TITLE_POST = "(//div[contains(@data-ad-comet-preview, 'message')])[{index}]"
-    MEDIA = "//div[@aria-posinset='{index}']"
+    POST = "//div[@aria-posinset='{index}']"
     MORE_OPTION = "(//div[@aria-haspopup='menu' and contains(@class, 'x1i10hfl') and contains(@aria-label, 'Hành động với bài viết này')])[{index}]"
     
     def find_element(self, locator_type, locator_value):
@@ -146,132 +149,6 @@ class BasePage:
         with open(data_file, 'r', encoding='utf-8') as f:
             data = json.load(f, strict = False)
         return data
-
-    def get_title_and_media(self, index):
-        try:
-            # Lấy title và media từ view ban đầu (không có view detail)
-            title_xpath = self.TITLE_POST.replace("{index}", str(index))
-            media_xpath = self.MEDIA.replace("{index}", str(index))
-            
-            # self.wait_for_element_present(title_xpath)
-
-            # Tìm phần tử title và media
-            title_element = self.driver.find_element(By.XPATH, title_xpath)
-            media_element = self.driver.find_element(By.XPATH, media_xpath)
-
-            # Lấy text của title
-            title = title_element.get_attribute("innerText").strip()
-
-            # Tìm các thẻ img trong phần media
-            img_elements = media_element.find_elements(By.XPATH, ".//img[contains(@src, 'fbcdn.net')]")
-
-            # Nếu không có title hoặc media, bỏ qua
-            if not title or not img_elements:
-                return {"title": "", "media": [], "hashtags": []}
-
-            # Lọc các ảnh có width > 50px
-            images = []
-            for img in img_elements:
-                # Sử dụng JavaScript để lấy Rendered size (naturalWidth) của ảnh
-                width = self.driver.execute_script("return arguments[0].naturalWidth;", img)
-
-                if width > 50:  # Chỉ lấy ảnh có kích thước width > 50px
-                    img_url = img.get_attribute("src")
-                    if img_url:
-                        images.append(img_url)
-
-            # Tìm các hashtag trong title
-            hashtags = re.findall(r"#\S+", title)
-
-            # Trả về title, media (ảnh hợp lệ), và danh sách hashtag
-            return {"title": title, "media": images, "hashtags": hashtags}
-
-        except Exception as e:
-            return {"title": "", "media": [], "hashtags": []} 
-
-    def crawl_posts(self, group_url, num_posts, existing_posts):
-        print(f"Crawling posts from: {group_url}")
-        self.driver.get(group_url)
-        time.sleep(2)
-
-        posts = []
-        index = 1  # Bắt đầu từ index = 1
-        while len(posts) < num_posts:
-            try:
-                # Cuộn trang để tìm các bài viết
-                self.scroll_page_to_load_posts(index)
-
-                # Tìm title và media ở vị trí index
-                post_data = self.get_title_and_media(index)
-
-                # Kiểm tra nếu có title và media
-                title = post_data["title"]
-                media = post_data["media"]
-                if not title or not media:
-                    index += 1  # Nếu không có title hoặc media, chuyển sang bài tiếp theo
-                    continue
-
-                # Kiểm tra nếu có video, bỏ qua
-                video_elements = self.driver.find_elements(By.XPATH, f"//div[@aria-posinset='{index}']//video")
-                if video_elements:
-                    print(f"Video found at index {index}, skipping.")
-                    index += 1  # Bỏ qua nếu có video
-                    continue
-
-                # Lưu ảnh vào thư mục media
-                media_files = []  # Danh sách lưu tên file hình ảnh
-                for i, img_url in enumerate(media):
-                    try:
-                        # Tạo tên file cho hình ảnh
-                        img_filename = f"media_{len(posts) + 1}_{i + 1}.jpg"
-                        img_path = os.path.join(self.MEDIA_DIR, img_filename)
-
-                        # Tải và lưu ảnh vào MEDIA_DIR
-                        response = requests.get(img_url)
-                        with open(img_path, "wb") as file:
-                            file.write(response.content)
-
-                        # Lưu tên file vào danh sách
-                        media_files.append(img_filename)
-                    except Exception as e:
-                        print(f"Error downloading image {i + 1}: {e}")
-
-                # Thêm bài viết vào danh sách
-                posts.append({"title": title, "media": media_files})
-                existing_posts[title] = True  # Đánh dấu bài viết đã tồn tại
-
-                # Dừng lại nếu đã crawl đủ số bài viết
-                if len(posts) >= num_posts:
-                    break
-
-                index += 1  # Tăng index để crawl bài tiếp theo
-
-            except Exception as e:
-                print(f"Error at index {index}: {e}")
-                index += 1  # Bỏ qua nếu có lỗi và chuyển sang bài viết tiếp theo
-
-        print(f"Crawled {len(posts)} new posts.")
-        return posts
-
-    def scroll_page_to_load_posts(self, index):
-        try:
-            # Định nghĩa XPath của phần tử MEDIA
-            media_xpath = self.MEDIA.replace("{index}", str(index))
-            
-            # Sau khi phần tử xuất hiện, cuộn đến phần tử đó
-            media_element = self.driver.find_element(By.XPATH, media_xpath)
-            
-            # Tính toán một nửa chiều cao của phần tử để cuộn đến giữa phần tử
-            scroll_position = media_element.location['y'] # Tính vị trí giữa phần tử
-            
-            self.click_element(self.MORE_OPTION.replace("{index}", str(index)))
-
-            # Cuộn đến giữa phần tử
-            self.driver.execute_script(f"window.scrollTo(0, {scroll_position});")
-            time.sleep(2)  # Đợi 2 giây sau khi cuộn đến vị trí giữa phần tử
-
-        except Exception as e:
-            print(f"Error while scrolling: {e}")
         
     @staticmethod
     def extract_username_from_url(url):
@@ -326,6 +203,7 @@ class BasePage:
 
         except Exception as e:
             print(f"Error saving to JSON: {e}")
+
             
     def read_existing_posts(self, output_file):
         try:
@@ -428,4 +306,37 @@ class BasePage:
         except Exception as e:
             print(f"Lỗi khi xóa thư mục media: {e}")
 
-    
+    # ====================================================================================================
+
+    def scroll_to_element_and_crawl(self, nums_post, page, index_start=1):
+        self.driver.get(page)
+        for index in range(index_start, nums_post + 1):
+            try:
+                # Tạo XPath động cho phần tử chính (post)
+                post_xpath = self.POST.replace("{index}", str(index))
+                
+                # Tìm phần tử chính bằng XPath
+                post_element = self.driver.find_element(By.XPATH, post_xpath)
+                
+                # Cuộn đến vị trí của phần tử chính
+                self.driver.execute_script("arguments[0].scrollIntoView();", post_element)
+                
+                # Chờ để đảm bảo phần tử đã tải đầy đủ
+                time.sleep(2)
+                
+                # Tìm các phần tử con trong element post tại vị trí index
+                message_elements = post_element.find_elements(By.XPATH, ".//div[contains(@data-ad-comet-preview, 'message')]")
+                
+                if not message_elements:
+                    print(f"Không tìm thấy message element trong post tại index {index}")
+                
+                # Lấy text từ tất cả các phần tử message
+                messages = [message.text for message in message_elements]
+                
+                # In hoặc xử lý văn bản tùy ý
+                for msg in messages:
+                    print(f"Post {index}: {msg}")
+            
+            except Exception as e:
+                print(f"Lỗi khi xử lý phần tử tại index {index}: {e}")
+                break
