@@ -15,7 +15,7 @@ def main():
     service = Service(config.CHROME_DRIVER_PATH)
     chrome_options = Options()
     chrome_options.add_argument("--disable-notifications")  # Chặn thông báo
-    # chrome_options.add_argument("--headless")  # Chế độ không giao diện
+    chrome_options.add_argument("--headless")  # Chế độ không giao diện
     chrome_options.add_argument("--disable-gpu")  # Vô hiệu hóa GPU khi chạy headless
     chrome_options.add_argument("--window-size=1920x1080")  # Thiết lập kích thước cửa sổ để tránh một số vấn đề hiển thị
     driver = webdriver.Chrome(service=service, options=chrome_options)
@@ -43,6 +43,7 @@ def main():
 
         driver.get(config.FACEBOOK_URL)
         base_page.login_facebook(email_facebook, password_facebook)
+        print("Đăng nhập thành công vào Facebook.")
 
         # Lặp qua tất cả các tài khoản và xử lý
         for account_key, account_data in accounts_data.items():
@@ -53,27 +54,28 @@ def main():
                 group_url = account_data["url2"]
                 emso_username = account_data["username"]
                 emso_password = account_data["password"]
-                url1 = account_data["url1"]
+                post_url = account_data["url1"]  # URL để đăng bài
 
-                # Crawl bài viết mới từ Facebook group_url
+                # Crawl bài viết mới từ group_url
                 num_posts = 3
-                base_page.scroll_to_element_and_crawl(num_posts, group_url)
-                
-                # base_page.logout()
+                base_page.scroll_to_element_and_crawl(
+                    username=emso_username,
+                    password=emso_password,
+                    nums_post=num_posts,
+                    crawl_page=group_url,
+                    post_page=post_url
+                )
+
+                print(f"Hoàn tất xử lý tài khoản: {account_key}")
 
             except Exception as e:
-                print(f"Đã gặp lỗi khi xử lý tài khoản {account_key}")
-                PROFILE_ACCOUNT_ICON = "//div[@id='root']/div/div/div/div/header/div/div/div[3]/div/div[2]/div[2]/i"
-                if base_page.is_element_present_by_xpath(PROFILE_ACCOUNT_ICON):
-                    base_page.logout()
-                    continue  # Tiếp tục với tài khoản tiếp theo nếu gặp lỗi`   
-                else:
-                    continue
-        print("Hoàn tất tất cả các bài đăng.")
+                print(f"Đã gặp lỗi khi xử lý tài khoản {account_key}: {e}")
+                continue  # Tiếp tục với tài khoản tiếp theo nếu gặp lỗi
+
+        print("Đã hoàn tất xử lý tất cả các tài khoản.")
 
     finally:
         driver.quit()
-
 
 if __name__ == "__main__":
     main()

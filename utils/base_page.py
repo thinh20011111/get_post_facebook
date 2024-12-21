@@ -15,6 +15,7 @@ import csv
 import pandas as pd
 import base64
 import requests
+from utils.config import Config
 import json
 import time
 
@@ -27,6 +28,7 @@ logging.basicConfig(
 class BasePage:
     def __init__(self, driver):
         self.driver = driver
+        self.config = Config()
         self.driver = driver
         self.media_dir = os.path.join(os.getcwd(), "media")
         os.makedirs(self.media_dir, exist_ok=True)
@@ -54,6 +56,7 @@ class BasePage:
     TITLE_POST = "(//div[contains(@data-ad-comet-preview, 'message')])[{index}]"
     POST = "//div[@aria-posinset='{index}']"
     MORE_OPTION = "(//div[@aria-haspopup='menu' and contains(@class, 'x1i10hfl') and contains(@aria-label, 'Hành động với bài viết này')])[{index}]"
+    SKIP_BANNER = "//div[contains(text(), 'Tiếp tục')]"
     
     def find_element(self, locator_type, locator_value):
         return self.driver.find_element(locator_type, locator_value)
@@ -64,8 +67,8 @@ class BasePage:
         self.click_element(self.LOGIN_BUTTON) 
         time.sleep(5)
     
-    def login_emso(self, url, username, password):
-        self.driver.get(url)
+    def login_emso(self, username, password):
+        self.driver.get(self.config.EMSO_URL)
         time.sleep(1)
         self.input_text(self.LOGIN_EMAIL_INPUT, username)
         self.input_text(self.LOGIN_PWD_INPUT, password)
@@ -225,8 +228,12 @@ class BasePage:
             if isinstance(image_name, list):
                 image_name = image_name[0]  # Lấy ảnh đầu tiên trong danh sách
 
-            # Xác định đường dẫn tuyệt đối của ảnh trong thư mục media
-            image_path = os.path.abspath(f"media/{image_name}")  # Thư mục media và tên tệp ảnh
+            # Đảm bảo đường dẫn tuyệt đối tới thư mục 'media' và ảnh
+            media_dir = os.path.join(os.getcwd(), 'media')  # Lấy đường dẫn tuyệt đối thư mục 'media'
+            image_path = os.path.join(media_dir, image_name)  # Đảm bảo đường dẫn chính xác
+
+            # In ra đường dẫn ảnh để kiểm tra
+            print(f"Đường dẫn ảnh: {image_path}")
 
             # Kiểm tra xem file có tồn tại không
             if not os.path.exists(image_path):
@@ -307,8 +314,8 @@ class BasePage:
             print(f"Lỗi khi xóa thư mục media: {e}")
 
     # ====================================================================================================
-    def scroll_to_element_and_crawl(self, nums_post, page, index_start=1):
-        self.driver.get(page)
+    def scroll_to_element_and_crawl(self, username, password, nums_post, crawl_page, post_page, index_start=1):
+        self.driver.get(crawl_page)
         post_data = []  # Danh sách để lưu dữ liệu của các bài post hợp lệ
         current_post_index = index_start  # Bắt đầu từ index_start
 
@@ -352,7 +359,7 @@ class BasePage:
                 messages = [message.text for message in message_elements]
 
                 # Kiểm tra nếu messages đã tồn tại trong dữ liệu cũ
-                if any(post.get("messages") == messages for post in existing_data.get(page, [])):
+                if any(post.get("messages") == messages for post in existing_data.get(crawl_page, [])):
                     print(f"Post {current_post_index} với messages đã tồn tại, bỏ qua.")
                     current_post_index += 1
                     continue  # Bỏ qua bài đăng này nếu messages đã tồn tại
@@ -362,7 +369,7 @@ class BasePage:
                 image_urls = []
 
                 for img in image_elements:
-                    # Kiểm tra kích thước ảnh bằng `naturalWidth`
+                    # Kiểm tra kích thước ảnh bằng naturalWidth
                     img_width = self.driver.execute_script("return arguments[0].naturalWidth;", img)
                     if img_width >= 100:
                         img_url = img.get_attribute("src")
@@ -384,10 +391,12 @@ class BasePage:
                     try:
                         response = requests.get(img_url, stream=True)
                         if response.status_code == 200:
-                            image_path = os.path.join(media_dir, f"page_{current_post_index}_img_{i}.jpg")
+                            # Lưu chỉ tên ảnh mà không phải đường dẫn đầy đủ
+                            image_name = f"page_{current_post_index}_img_{i}.jpg"
+                            image_path = os.path.join(media_dir, image_name)
                             with open(image_path, "wb") as img_file:
                                 img_file.write(response.content)
-                            image_paths.append(image_path)
+                            image_paths.append(image_name)  # Lưu tên ảnh thay vì đường dẫn đầy đủ
                         else:
                             break  # Ngừng tải ảnh nếu có lỗi
                     except Exception:
@@ -404,30 +413,58 @@ class BasePage:
                 post_data.append({
                     "post_index": current_post_index,
                     "messages": messages,
-                    "images": image_paths
+                    "images": image_paths  # Lưu chỉ tên ảnh
                 })
                 
                 print(f"Đã xử lý post {current_post_index}. Text: {messages}, Ảnh hợp lệ: {len(image_paths)}")
-            
+
             except Exception as e:
                 print(f"Lỗi khi xử lý phần tử tại index {current_post_index}: {e}")
             
             # Tăng index để tiếp tục cuộn và kiểm tra bài đăng tiếp theo
             current_post_index += 1
-            
+
             # Kiểm tra nếu đã đủ số lượng bài hợp lệ
             if len(post_data) >= nums_post:
                 print(f"Đã thu thập đủ {nums_post} bài đăng hợp lệ.")
                 break  # Dừng quá trình crawl khi đã đủ số lượng bài hợp lệ
 
-        # Thêm dữ liệu mới vào existing_data mà không ghi đè
+        # Sau khi crawl xong tất cả các bài, đăng bài lần lượt
         if post_data:
-            if page in existing_data:
-                existing_data[page].extend(post_data)  # Thêm các bài mới vào danh sách cũ
-            else:
-                existing_data[page] = post_data  # Nếu chưa có trang này trong dữ liệu cũ, thêm mới
+            try:
+                # Đăng nhập một lần trước khi bắt đầu đăng bài
+                self.login_emso(username, password)
+                self.driver.get(post_page)
+                
+                # Đảm bảo trang đã được tải xong
+                WebDriverWait(self.driver, 30).until(EC.presence_of_element_located((By.XPATH, self.OPEN_FORM)))  # Thay INPUT_POST bằng phần tử quan trọng trong form đăng bài
+                
+                # Vòng lặp đăng bài
+                for post in post_data:
+                    try:
+                        # Đăng bài với tiêu đề và hình ảnh
+                        self.create_post(post["messages"][0], post["images"])
+                        print(f"Đã đăng bài thành công cho post {post['post_index']}")
+                        self.driver.refresh()  # Làm mới trang để chuẩn bị đăng bài tiếp theo
+                    except Exception as post_err:
+                        # Nếu có lỗi khi đăng bài, in ra lỗi và tiếp tục với bài tiếp theo
+                        print(f"Lỗi khi đăng bài {post['post_index']}: {post_err}")
+                
+            except Exception as login_err:
+                # Nếu có lỗi trong quá trình đăng nhập, in ra và tiếp tục
+                print(f"Lỗi khi đăng nhập hoặc truy cập trang đăng bài: {login_err}")
+            
+            finally:
+                # Đăng xuất sau khi đăng xong tất cả các bài
+                self.logout()
+                print("Đã đăng xuất khỏi tài khoản.")
 
-            # Lưu dữ liệu vào tệp JSON khi đã thu thập đủ bài hợp lệ
+            # Lưu dữ liệu vào tệp JSON khi đã xử lý xong
+            if crawl_page in existing_data:
+                existing_data[crawl_page].extend(post_data)
+            else:
+                existing_data[crawl_page] = post_data
+
             try:
                 with open(output_file, "w", encoding="utf-8") as json_file:
                     json.dump(existing_data, json_file, ensure_ascii=False, indent=4)
